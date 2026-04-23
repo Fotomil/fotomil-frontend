@@ -15,6 +15,8 @@ import {
   X,
   Minimize,
   MessageCircle,
+  FileDown,
+  Send,
 } from 'lucide-react';
 import { useViewerStore } from '@/stores/viewer-store';
 import { formatDateTime } from '@/lib/format-date';
@@ -38,9 +40,11 @@ interface Props {
   saveCopiesFn?: (imageId: string, copies: number) => Promise<void>;
   showCopies?: boolean;
   commentsLoadFn?: (imageId: string) => Promise<Comment[]>;
+  onDownloadImage?: (imageId: string) => void;
+  onAddComment?: (imageId: string, authorName: string, text: string) => Promise<Comment>;
 }
 
-export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowComments, imageUrlFn, saveCopiesFn, showCopies = true, commentsLoadFn }: Props) {
+export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowComments, imageUrlFn, saveCopiesFn, showCopies = true, commentsLoadFn, onDownloadImage, onAddComment }: Props) {
   const { t } = useTranslation();
   const {
     currentIndex,
@@ -57,6 +61,9 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
 
   const image = images[currentIndex];
   const [displayValue, setDisplayValue] = useState(String(image?.num_copies ?? 0));
+  const [commentName, setCommentName] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [commentSending, setCommentSending] = useState(false);
   const [showExif, setShowExif] = useState(false);
   const [showComments, setShowComments] = useState(initialShowComments ?? false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -188,30 +195,23 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
               className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
             >
               <ChevronLeft className="h-4 w-4" />
-              {t('image.backToGrid')}
+              <span className="hidden sm:inline">{t('image.backToGrid')}</span>
             </button>
-            <span className="max-w-[30vw] truncate text-sm text-muted-foreground sm:max-w-none">{image.filename}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{image.filename}</span>
           </div>
 
           <div className="flex items-center gap-1">
             <span className="mr-2 text-sm text-muted-foreground">
               {currentIndex + 1} / {images.length}
             </span>
-            {galleryId && (
-              <button
-                onClick={() => setShowComments(!showComments)}
-                className={`rounded-md p-1.5 hover:bg-accent/50 ${showComments ? 'text-primary' : ''}`}
-                title={t('gallery.comments')}
-              >
-                <MessageCircle className="h-4 w-4" />
-              </button>
-            )}
             <button onClick={() => setShowExif(!showExif)} className="rounded-md p-1.5 hover:bg-accent/50" title={t('image.exifInfo')}>
               <Info className="h-4 w-4" />
             </button>
-            <button onClick={toggleFullscreen} className="rounded-md p-1.5 hover:bg-accent/50" title={t('image.fullscreen')}>
-              <Maximize className="h-4 w-4" />
-            </button>
+            {onDownloadImage && (
+              <button onClick={() => onDownloadImage(image.id)} className="rounded-md p-1.5 hover:bg-accent/50" title={t('export.downloadImage')}>
+                <FileDown className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -271,6 +271,17 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
           )}
         </TransformWrapper>
 
+        {/* Fullscreen button — top-right of image area */}
+        {!isFullscreen && (
+          <button
+            onClick={toggleFullscreen}
+            className="absolute right-3 top-3 z-10 rounded-full border border-border bg-card p-2 shadow-lg hover:bg-accent"
+            title={t('image.fullscreen')}
+          >
+            <Maximize className="h-4 w-4" />
+          </button>
+        )}
+
         {/* Nav arrows — hidden in fullscreen */}
         {!isFullscreen && currentIndex > 0 && (
           <button
@@ -290,8 +301,8 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
         )}
 
         {/* EXIF panel — hidden in fullscreen */}
-        {!isFullscreen && showExif && image.exif_data && (
-          <div className={`absolute right-0 top-0 h-full w-72 overflow-y-auto p-4 shadow-lg ${isFullscreen ? 'bg-black/80 text-white' : 'bg-card border-l border-border'}`}>
+        {!isFullscreen && showExif && (
+          <div className="absolute right-0 top-0 z-10 h-full w-72 overflow-y-auto bg-card p-4 shadow-lg border-l border-border">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-medium">{t('image.exifInfo')}</h3>
               <button onClick={() => setShowExif(false)} className="rounded p-1 hover:bg-accent/50">
@@ -299,6 +310,10 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
               </button>
             </div>
             <dl className="space-y-2 text-sm">
+              <div>
+                <dt className="text-muted-foreground">{t('image.filename')}</dt>
+                <dd className="break-all">{image.filename}</dd>
+              </div>
               {image.width && image.height && (
                 <div>
                   <dt className="text-muted-foreground">Resolution</dt>
@@ -311,7 +326,13 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
                   <dd>{(image.file_size / 1024 / 1024).toFixed(2)} MB</dd>
                 </div>
               )}
-              {Object.entries(image.exif_data).map(([key, value]) => (
+              {image.mime_type && (
+                <div>
+                  <dt className="text-muted-foreground">Type</dt>
+                  <dd>{image.mime_type}</dd>
+                </div>
+              )}
+              {image.exif_data && Object.entries(image.exif_data).map(([key, value]) => (
                 <div key={key}>
                   <dt className="text-muted-foreground">{key}</dt>
                   <dd className="break-all">{String(value)}</dd>
@@ -345,16 +366,83 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
                 ))}
               </div>
             )}
+
+            {/* Comment form */}
+            {onAddComment && (
+              <form
+                className="mt-3 space-y-2 border-t border-border pt-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!commentName.trim() || !commentText.trim() || commentSending) return;
+                  setCommentSending(true);
+                  try {
+                    const newComment = await onAddComment(image.id, commentName.trim(), commentText.trim());
+                    setComments((prev) => [...prev, newComment]);
+                    setCommentText('');
+                  } catch { /* ignore */ }
+                  setCommentSending(false);
+                }}
+              >
+                <input
+                  type="text"
+                  value={commentName}
+                  onChange={(e) => setCommentName(e.target.value)}
+                  placeholder={t('auth.fullName')}
+                  className="w-full rounded border border-input bg-background px-2 py-1 text-xs outline-none ring-ring focus:ring-1"
+                />
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder={t('gallery.comments')}
+                    className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs outline-none ring-ring focus:ring-1"
+                  />
+                  <button
+                    type="submit"
+                    disabled={commentSending || !commentName.trim() || !commentText.trim()}
+                    className="rounded bg-primary p-1 text-primary-foreground disabled:opacity-50"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
       </div>
 
       {/* Bottom bar — hidden in fullscreen */}
       {!isFullscreen && (
-      <div className="flex items-center justify-center gap-4 border-t border-border bg-card px-4 py-3">
+      <div className="flex items-center justify-between border-t border-border bg-card px-3 py-2.5 sm:justify-center sm:gap-4 sm:px-4 sm:py-3">
+        <div className="flex items-center gap-1 sm:hidden">
+          {(galleryId || commentsLoadFn) && (
+            <button
+              onClick={() => setShowComments(!showComments)}
+              className={`rounded-md p-2 hover:bg-accent/50 ${showComments ? 'text-primary' : ''}`}
+              title={t('gallery.comments')}
+            >
+              <MessageCircle className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Desktop: comments button inline */}
+        <div className="hidden sm:flex sm:items-center sm:gap-1">
+          {(galleryId || commentsLoadFn) && (
+            <button
+              onClick={() => setShowComments(!showComments)}
+              className={`rounded-md p-1.5 hover:bg-accent/50 ${showComments ? 'text-primary' : ''}`}
+              title={t('gallery.comments')}
+            >
+              <MessageCircle className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         {showCopies && (
-          <>
-            <label className="text-sm font-medium">{t('image.numberOfCopies')}:</label>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium sm:text-sm">{t('image.numberOfCopies')}:</label>
             <input
               ref={copiesRef}
               type="text"
@@ -363,12 +451,30 @@ export function ImageViewer({ images, onCopiesChanged, galleryId, initialShowCom
               onChange={(e) => setDisplayValue(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={() => saveCopies()}
               onFocus={(e) => e.target.select()}
-              className="w-20 rounded-md border border-input bg-background px-3 py-1.5 text-center text-sm text-foreground outline-none ring-ring focus:ring-2"
+              className="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-center text-sm text-foreground outline-none ring-ring focus:ring-2"
             />
-          </>
+          </div>
         )}
+
+        <div className="flex items-center gap-1 sm:hidden">
+          <button
+            onClick={handlePrevious}
+            disabled={currentIndex === 0}
+            className="rounded-md p-2 hover:bg-accent/50 disabled:opacity-30"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={currentIndex >= images.length - 1}
+            className="rounded-md p-2 hover:bg-accent/50 disabled:opacity-30"
+          >
+            <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+
         <span className="hidden text-xs text-muted-foreground sm:inline">
-          Enter: {t('common.save')} & {t('common.next')} | Esc: {t('image.backToGrid')} | F: {t('image.fullscreen')}
+          {showCopies && <>Enter: {t('common.save')} & {t('common.next')} | </>}Esc: {t('image.backToGrid')} | F: {t('image.fullscreen')}
         </span>
       </div>
       )}

@@ -4,23 +4,28 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Upload, ArrowUpDown, Share2, FileSpreadsheet, BarChart3, Pencil,
+  ArrowLeft, Upload, ArrowUpDown, Share2, FileSpreadsheet, FileText, Receipt,
+  Download, ChevronDown, BarChart3, Pencil, Printer, ShoppingBag,
   X, Archive, FileDown, CheckSquare, Square, Trash2, MousePointerClick,
 } from 'lucide-react';
+import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { Header } from '@/components/layout/Header';
 import { ImageUploader } from '@/components/image/ImageUploader';
 import { ImageThumbnail } from '@/components/image/ImageThumbnail';
 import { ImageViewer } from '@/components/image/ImageViewer';
 import { ShareDialog } from '@/components/gallery/ShareDialog';
 import { ImageContextMenu } from '@/components/image/ImageContextMenu';
+import { ExpandableText } from '@/components/ui/ExpandableText';
+import { OrderPrintsDialog } from '@/components/order/OrderPrintsDialog';
+import { OrderHistory } from '@/components/order/OrderHistory';
 import { getGallery, updateGallery } from '@/api/galleries';
 import client from '@/api/client';
-import { getImages, updateCopies, batchUpdateCopies, downloadImagesZip, downloadSingleImage, deleteImage, reorderImages, type ImageData } from '@/api/images';
+import { getImages, uploadImages, updateCopies, batchUpdateCopies, downloadImagesZip, downloadSingleImage, deleteImage, reorderImages, setCachedToken, type ImageData } from '@/api/images';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useViewerStore } from '@/stores/viewer-store';
-import { useAuthStore } from '@/stores/auth-store';
+import { useAuth0 } from '@auth0/auth0-react';
 import { formatDateTime } from '@/lib/format-date';
 import { ThumbnailSkeleton } from '@/components/ui/Skeleton';
 import { VirtualImageGrid } from '@/components/image/VirtualImageGrid';
@@ -48,6 +53,8 @@ export function GalleryPage() {
   const queryClient = useQueryClient();
   const [showUploader, setShowUploader] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showOrderDialog, setShowOrderDialog] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
   const [showEditGallery, setShowEditGallery] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analytics, setAnalytics] = useState<{ total_views: number; unique_visitors: number; recent_views: { ip_address: string; viewed_at: string }[] } | null>(null);
@@ -55,12 +62,20 @@ export function GalleryPage() {
   const [modalComments, setModalComments] = useState<{ id: string; author_name: string; text: string; created_at: string }[]>([]);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState('');
-  const token = useAuthStore((s) => s.accessToken);
+  const { getAccessTokenSilently } = useAuth0();
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    getAccessTokenSilently().then((t) => {
+      setToken(t);
+      setCachedToken(t);
+    }).catch(() => {});
+  }, [getAccessTokenSilently]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState('sort_order');
   const [sortDir, setSortDir] = useState('asc');
   const [batchCopies, setBatchCopies] = useState('0');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; imageId: string } | null>(null);
+  const mobileFileRef = useRef<HTMLInputElement>(null);
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('hint_context_menu_dismissed'));
 
   // Drag-and-drop: require 10px movement before starting drag (to not interfere with clicks)
@@ -163,6 +178,21 @@ export function GalleryPage() {
     [queryClient, id]
   );
 
+  const handleMobileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !id) return;
+    try {
+      const result = await uploadImages(id, Array.from(files));
+      if (result.uploaded.length > 0) {
+        toast.success(`${result.uploaded.length} ${t('gallery.images')} uploaded`);
+        handleUploaded(result.uploaded);
+      }
+    } catch {
+      toast.error('Upload failed');
+    }
+    e.target.value = '';
+  }, [id, handleUploaded, t]);
+
   // Selection: click toggles, shift-click selects range
   const handleSelect = useCallback((imageId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -264,91 +294,165 @@ export function GalleryPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="mx-auto max-w-7xl px-2 py-4 sm:px-4 sm:py-6">
-        {/* Top bar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => navigate('/')}
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{gallery?.name ?? '...'}</h1>
-              {gallery?.description && (
-                <p className="truncate text-sm text-muted-foreground">{gallery.description}</p>
-              )}
-            </div>
-            <button
-              onClick={() => setShowEditGallery(true)}
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title={t('common.edit')}
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <a
-              href={`/api/galleries/${id}/export/csv?token=${token}`}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent sm:px-3 sm:py-2"
-              title={t('export.exportPrintOrder')}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('export.exportPrintOrder')}</span>
-            </a>
-            <a
-              href={`/api/galleries/${id}/export/pdf?token=${token}`}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent sm:px-3 sm:py-2"
-              title={t('export.exportPDF')}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('export.exportPDF')}</span>
-            </a>
-            <a
-              href={`/api/galleries/${id}/export/invoice?token=${token}`}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent sm:px-3 sm:py-2"
-              title={t('export.exportInvoice')}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('export.exportInvoice')}</span>
-            </a>
-            <button
-              onClick={async () => {
-                try {
-                  const res = await client.get(`/galleries/${id}/analytics`);
-                  setAnalytics(res.data);
-                  setShowAnalytics(true);
-                } catch { /* ignore */ }
-              }}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent sm:px-3 sm:py-2"
-              title={t('gallery.analytics')}
-            >
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('gallery.analytics')}</span>
-            </button>
-            <button
-              onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent sm:px-3 sm:py-2"
-              title={t('share.shareGallery')}
-            >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('share.shareGallery')}</span>
-            </button>
-            <button
-              onClick={() => setShowUploader((v) => !v)}
-              className="flex items-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 sm:px-4 sm:py-2"
-            >
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('gallery.uploadImages')}</span>
-            </button>
+      {/* Selection top bar — sticks to top when header scrolls away */}
+      {selectedCount > 0 && !isViewerOpen && (
+        <div className="sticky top-0 z-30 border-b border-border bg-card shadow-sm">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-2 py-2 sm:px-4 sm:py-2.5">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-medium text-foreground sm:text-sm">
+                {selectedCount} {t('export.downloadSelected')}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                onClick={handleDeleteSelected}
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-destructive px-2 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 sm:gap-1.5 sm:px-3 sm:py-2"
+                title={t('common.delete')}
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                {t('common.delete')} ({selectedCount})
+              </button>
+
+              <DropdownMenu
+                items={[
+                  { icon: Archive, label: `ZIP (${selectedCount})`, onClick: () => handleDownloadZip(Array.from(selectedIds)) },
+                  { icon: FileDown, label: `${t('export.downloadIndividual')} (${selectedCount})`, onClick: () => handleDownloadIndividual(Array.from(selectedIds)) },
+                ]}
+                trigger={
+                  <button
+                    disabled={downloading}
+                    className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:py-2"
+                  >
+                    <Download className="h-3.5 w-3.5 shrink-0" />
+                    {downloading ? downloadProgress : `${t('export.download')} (${selectedCount})`}
+                  </button>
+                }
+              />
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Uploader */}
+      <main className={`mx-auto max-w-7xl px-2 py-4 sm:px-4 sm:py-6 ${selectedCount > 0 ? 'pb-20' : ''}`}>
+        {/* Top bar — row 1: back + name + edit */}
+        <div className="mb-2 flex items-center gap-2 sm:mb-3 sm:gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{gallery?.name ?? '...'}</h1>
+            {gallery?.description && (
+              <ExpandableText text={gallery.description} maxLength={150} />
+            )}
+          </div>
+          <button
+            onClick={() => setShowEditGallery(true)}
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title={t('common.edit')}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Top bar — row 2: action buttons */}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 sm:mb-6 sm:gap-2">
+          <DropdownMenu
+            align="left"
+            trigger={
+              <button className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm">
+                <Download className="h-4 w-4 shrink-0" />
+                {t('export.export')}
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </button>
+            }
+            items={[
+              { icon: FileSpreadsheet, label: t('export.exportPrintOrder'), href: `/api/galleries/${id}/export/csv?token=${token}` },
+              { icon: FileText, label: t('export.exportPDF'), href: `/api/galleries/${id}/export/pdf?token=${token}` },
+              { icon: Receipt, label: t('export.exportInvoice'), href: `/api/galleries/${id}/export/invoice?token=${token}` },
+            ]}
+          />
+
+          <div className="hidden h-6 w-px bg-border sm:block" />
+
+          <button
+            onClick={async () => {
+              try {
+                const res = await client.get(`/galleries/${id}/analytics`);
+                setAnalytics(res.data);
+                setShowAnalytics(true);
+              } catch { /* ignore */ }
+            }}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm"
+            title={t('gallery.analytics')}
+          >
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            {t('gallery.analytics')}
+          </button>
+          <button
+            onClick={() => setShowShare(true)}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm"
+            title={t('share.shareGallery')}
+          >
+            <Share2 className="h-4 w-4 shrink-0" />
+            {t('share.shareGallery')}
+          </button>
+          <button
+            onClick={() => setShowOrderDialog(true)}
+            disabled={(images ?? []).filter(i => i.num_copies > 0).length === 0}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm"
+          >
+            <Printer className="h-4 w-4 shrink-0" />
+            {t('order.orderPrints')}
+          </button>
+          <button
+            onClick={() => setShowOrders(!showOrders)}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm"
+          >
+            <ShoppingBag className="h-4 w-4 shrink-0" />
+            {t('order.orders')}
+          </button>
+
+          <div className="hidden h-6 w-px bg-border sm:block" />
+
+          <button
+            onClick={() => {
+              if (window.innerWidth < 640) {
+                mobileFileRef.current?.click();
+              } else {
+                setShowUploader((v) => !v);
+              }
+            }}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:px-4 sm:py-2 sm:text-sm"
+          >
+            <Upload className="h-4 w-4 shrink-0" />
+            {t('gallery.uploadImages')}
+          </button>
+        </div>
+
+        {/* Uploader — desktop only, mobile uses file picker directly */}
+        {showOrders && id && (
+          <div className="mb-6 rounded-xl border border-border bg-card p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+              <ShoppingBag className="h-4 w-4" />
+              {t('order.orders')}
+            </h2>
+            <OrderHistory galleryId={id} />
+          </div>
+        )}
+
         {showUploader && (
-          <div className="mb-6">
+          <div className="mb-6 hidden sm:block">
             <ImageUploader galleryId={id!} onUploaded={handleUploaded} />
           </div>
         )}
@@ -363,31 +467,34 @@ export function GalleryPage() {
         ) : (
           <>
             {/* Toolbar: sort + select all */}
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                {t('image.sortBy')}:
-                {['sort_order', 'filename', 'num_copies', 'created_at'].map((field) => (
-                  <button
-                    key={field}
-                    onClick={() => handleSort(field)}
-                    className={`rounded px-2 py-0.5 text-xs ${sortBy === field ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-                  >
-                    {field === 'sort_order' ? '#' : field === 'num_copies' ? t('image.copiesCount') : field === 'created_at' ? t('image.dateAdded') : t('image.filename')}
-                    {sortBy === field && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <DropdownMenu
+                align="left"
+                trigger={
+                  <button className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm">
+                    <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+                    {t('image.sortBy')}:{' '}
+                    {sortBy === 'sort_order' ? t('image.sortOrder') : sortBy === 'num_copies' ? t('image.copiesCount') : sortBy === 'created_at' ? t('image.dateAdded') : t('image.filename')}
+                    {sortDir === 'asc' ? ' ↑' : ' ↓'}
                   </button>
-                ))}
-              </div>
+                }
+                items={[
+                  { icon: ArrowUpDown, label: `${t('image.sortOrder')} ${sortBy === 'sort_order' ? (sortDir === 'asc' ? '↑' : '↓') : ''}`, onClick: () => handleSort('sort_order') },
+                  { icon: ArrowUpDown, label: `${t('image.filename')} ${sortBy === 'filename' ? (sortDir === 'asc' ? '↑' : '↓') : ''}`, onClick: () => handleSort('filename') },
+                  { icon: ArrowUpDown, label: `${t('image.copiesCount')} ${sortBy === 'num_copies' ? (sortDir === 'asc' ? '↑' : '↓') : ''}`, onClick: () => handleSort('num_copies') },
+                  { icon: ArrowUpDown, label: `${t('image.dateAdded')} ${sortBy === 'created_at' ? (sortDir === 'asc' ? '↑' : '↓') : ''}`, onClick: () => handleSort('created_at') },
+                ]}
+              />
 
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleSelectAll}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm"
                 >
                   {selectedCount === images.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                  {selectedCount === images.length ? t('image.deselectAll') : t('image.selectAll')}
+                  <span className="hidden sm:inline">{selectedCount === images.length ? t('image.deselectAll') : t('image.selectAll')}</span>
                 </button>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground sm:text-sm">
                   {images.length} {t('gallery.images')}
                 </span>
               </div>
@@ -477,83 +584,37 @@ export function GalleryPage() {
             })()}
           </>
         )}
+        {/* Hidden file input for mobile upload */}
+        <input
+          ref={mobileFileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp"
+          multiple
+          className="hidden"
+          onChange={handleMobileUpload}
+        />
       </main>
 
-      {/* Selection action bar — fixed bottom */}
+      {/* Selection bottom bar — copies input */}
       {selectedCount > 0 && !isViewerOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-card shadow-lg">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-2 py-2 sm:px-4 sm:py-3">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <span className="text-xs font-medium text-foreground sm:text-sm">
-                {selectedCount} {t('export.downloadSelected')}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              {/* Batch copies */}
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={batchCopies}
-                  onChange={(e) => setBatchCopies(e.target.value.replace(/[^0-9]/g, ''))}
-                  onFocus={(e) => e.target.select()}
-                  className="w-14 rounded border border-input bg-background px-1.5 py-1 text-xs outline-none ring-ring focus:ring-1"
-                />
-                <button
-                  onClick={handleBatchApply}
-                  disabled={batchMutation.isPending}
-                  className="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 sm:px-3 sm:py-1.5"
-                  title={t('image.setCopiesToSelected')}
-                >
-                  <span className="hidden sm:inline">{t('image.setCopiesToSelected')}</span>
-                  <span className="sm:hidden">{t('image.copies')}</span>
-                </button>
-              </div>
-
-              <div className="hidden h-6 w-px bg-border sm:block" />
-
-              {/* Delete */}
-              <button
-                onClick={handleDeleteSelected}
-                className="flex items-center gap-1 rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 sm:gap-1.5 sm:px-3 sm:py-1.5"
-                title={t('common.delete')}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t('common.delete')}</span>
-                <span>({selectedCount})</span>
-              </button>
-
-              <div className="hidden h-6 w-px bg-border sm:block" />
-
-              {/* ZIP */}
-              <button
-                onClick={() => handleDownloadZip(Array.from(selectedIds))}
-                disabled={downloading}
-                className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:py-1.5"
-              >
-                <Archive className="h-3.5 w-3.5" />
-                {downloading ? downloadProgress : `ZIP (${selectedCount})`}
-              </button>
-
-              {/* Individual */}
-              <button
-                onClick={() => handleDownloadIndividual(Array.from(selectedIds))}
-                disabled={downloading}
-                className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:py-1.5"
-                title={t('export.downloadIndividual')}
-              >
-                <FileDown className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{downloading ? downloadProgress : `${t('export.downloadIndividual')} (${selectedCount})`}</span>
-                <span className="sm:hidden">{downloading ? downloadProgress : `(${selectedCount})`}</span>
-              </button>
-            </div>
+          <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 px-2 py-3 sm:px-4 sm:py-3">
+            <span className="text-sm text-muted-foreground">{t('image.numberOfCopies')}:</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={batchCopies}
+              onChange={(e) => setBatchCopies(e.target.value.replace(/[^0-9]/g, ''))}
+              onFocus={(e) => e.target.select()}
+              className="w-16 rounded border border-input bg-background px-2 py-1.5 text-sm outline-none ring-ring focus:ring-1"
+            />
+            <button
+              onClick={handleBatchApply}
+              disabled={batchMutation.isPending}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:px-5 sm:py-2"
+            >
+              {t('common.apply')}
+            </button>
           </div>
         </div>
       )}
@@ -569,6 +630,13 @@ export function GalleryPage() {
 
       {/* Share dialog */}
       <ShareDialog galleryId={id!} open={showShare} onClose={() => setShowShare(false)} />
+      <OrderPrintsDialog
+        open={showOrderDialog}
+        onClose={() => setShowOrderDialog(false)}
+        galleryId={id!}
+        images={images ?? []}
+        mode="photographer"
+      />
 
       {/* Context menu */}
       {contextMenu && (

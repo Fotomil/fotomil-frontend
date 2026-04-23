@@ -75,20 +75,23 @@ export async function deleteImage(imageId: string): Promise<void> {
   await client.delete(`/images/${imageId}`);
 }
 
-function getToken(): string {
-  return localStorage.getItem('access_token') || '';
+// Token cache for image URLs — set by Auth0 token getter
+let _cachedToken: string = '';
+
+export function setCachedToken(token: string) {
+  _cachedToken = token;
 }
 
 export function getThumbnailUrl(imageId: string): string {
-  return `/api/images/${imageId}/thumbnail?token=${getToken()}`;
+  return `/api/images/${imageId}/thumbnail?token=${_cachedToken}`;
 }
 
 export function getImageUrl(imageId: string, size: 'original' | 'medium' | 'thumbnail' = 'medium'): string {
-  return `/api/images/${imageId}/file?size=${size}&token=${getToken()}`;
+  return `/api/images/${imageId}/file?size=${size}&token=${_cachedToken}`;
 }
 
 export function getSingleDownloadUrl(imageId: string): string {
-  return `/api/images/${imageId}/download?token=${getToken()}`;
+  return `/api/images/${imageId}/download?token=${_cachedToken}`;
 }
 
 export async function downloadImagesZip(galleryId: string, imageIds?: string[]): Promise<void> {
@@ -114,7 +117,6 @@ export function downloadSingleImage(imageId: string): Promise<void> {
     iframe.style.display = 'none';
     iframe.src = getSingleDownloadUrl(imageId);
     document.body.appendChild(iframe);
-    // Clean up after download starts
     setTimeout(() => {
       iframe.remove();
       resolve();

@@ -1,16 +1,23 @@
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '@/stores/auth-store';
+import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, LogOut, Sun, Moon, Globe, Mail, User as UserIcon } from 'lucide-react';
-import { toast } from 'sonner';
-import client from '@/api/client';
+import { Camera, LogOut, Sun, Moon, Globe, User as UserIcon, Shield } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
+import { useState, useEffect } from 'react';
+import { checkAdmin } from '@/api/admin';
 
 export function Header() {
   const { t, i18n } = useTranslation();
-  const { user, logout, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuth0();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkAdmin().then(setIsAdmin).catch(() => {});
+    }
+  }, [isAuthenticated]);
 
   const toggleLanguage = () => {
     const newLang = i18n.language === 'sr' ? 'en' : 'sr';
@@ -19,34 +26,14 @@ export function Header() {
   };
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const handleResendVerification = async () => {
-    try {
-      await client.post('/auth/resend-verification');
-      toast.success(t('auth.verificationSent'));
-    } catch {
-      toast.error(t('auth.verificationSendFailed'));
-    }
+    logout({ logoutParams: { returnTo: window.location.origin } });
   };
 
   return (
-    <>
-    {isAuthenticated && user && !user.email_verified && (
-      <div className="flex items-center justify-center gap-2 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-700 dark:text-yellow-400">
-        <Mail className="h-4 w-4 shrink-0" />
-        <span>{t('auth.emailNotVerified')}</span>
-        <button onClick={handleResendVerification} className="font-medium underline hover:no-underline">
-          {t('auth.resendVerification')}
-        </button>
-      </div>
-    )}
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-2 sm:px-4">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 text-lg font-semibold text-foreground hover:opacity-80"
         >
           <Camera className="h-5 w-5" />
@@ -72,13 +59,23 @@ export function Header() {
 
           {isAuthenticated && user && (
             <>
+              {isAdmin && (
+                <button
+                  onClick={() => navigate('/admin')}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground sm:px-2"
+                  title={t('admin.title')}
+                >
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline">Admin</span>
+                </button>
+              )}
               <button
                 onClick={() => navigate('/profile')}
                 className="flex items-center gap-1 rounded-md px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground sm:px-2"
                 title={t('profile.title')}
               >
                 <UserIcon className="h-4 w-4" />
-                <span className="hidden text-sm sm:inline">{user.full_name}</span>
+                <span className="hidden text-sm sm:inline">{user.name}</span>
               </button>
               <button
                 onClick={handleLogout}
@@ -92,6 +89,5 @@ export function Header() {
         </div>
       </div>
     </header>
-    </>
   );
 }
