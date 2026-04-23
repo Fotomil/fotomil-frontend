@@ -1,40 +1,43 @@
 import client from './client';
 
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-}
-
-interface UserResponse {
+export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
-  email_verified: boolean;
   branding_name: string | null;
   branding_logo_url: string | null;
+  phone: string | null;
+  website_url: string | null;
+  instagram_url: string | null;
+  facebook_url: string | null;
+  bio: string | null;
   created_at: string;
 }
 
-export async function login(email: string, password: string, rememberMe: boolean = false): Promise<TokenResponse> {
-  const res = await client.post<TokenResponse>('/auth/login', { email, password, remember_me: rememberMe });
+export interface Identity {
+  provider: string;
+  connection: string;
+}
+
+export async function getMe(): Promise<UserProfile> {
+  const res = await client.get<UserProfile>('/auth/me');
   return res.data;
 }
 
-export async function register(
-  email: string,
-  password: string,
-  fullName: string
-): Promise<TokenResponse> {
-  const res = await client.post<TokenResponse>('/auth/register', {
-    email,
-    password,
-    full_name: fullName,
-  });
+export async function updateProfile(data: Record<string, string | null>): Promise<UserProfile> {
+  const res = await client.patch<UserProfile>('/auth/profile', data);
   return res.data;
 }
 
-export async function getMe(): Promise<UserResponse> {
-  const res = await client.get<UserResponse>('/auth/me');
+export async function requestPasswordReset(): Promise<void> {
+  await client.post('/auth/profile/change-password');
+}
+
+export async function getIdentities(): Promise<Identity[]> {
+  const res = await client.get<Identity[]>('/auth/profile/identities');
   return res.data;
+}
+
+export async function deleteAccount(): Promise<void> {
+  await client.delete('/auth/profile/account');
 }

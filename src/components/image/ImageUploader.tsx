@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 import { Upload, X, AlertTriangle, CheckCircle } from 'lucide-react';
@@ -108,12 +108,19 @@ export function ImageUploader({ galleryId, onUploaded }: Props) {
     [galleryId, onUploaded, t]
   );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: ACCEPTED,
     disabled: uploading,
     maxSize: MAX_SIZE_BYTES,
   });
+
+  // Auto-open file picker on mobile
+  useEffect(() => {
+    if (window.innerWidth < 640) {
+      open();
+    }
+  }, []);
 
   const overallPercent = fileProgress.length > 0
     ? Math.round(fileProgress.reduce((sum, f) => sum + f.percent, 0) / fileProgress.length)
@@ -123,7 +130,7 @@ export function ImageUploader({ galleryId, onUploaded }: Props) {
     <div className="space-y-2">
       <div
         {...getRootProps()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 transition-colors ${
+        className={`hidden sm:flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 transition-colors ${
           isDragActive
             ? 'border-primary bg-primary/5'
             : 'border-border hover:border-foreground/30'
@@ -137,6 +144,10 @@ export function ImageUploader({ galleryId, onUploaded }: Props) {
         <p className="mt-1 text-xs text-muted-foreground/60">
           JPG, PNG, GIF, BMP, TIFF, WebP · max {MAX_SIZE_MB}MB
         </p>
+      </div>
+      {/* Hidden input for mobile — file picker opened via open() */}
+      <div className="sm:hidden">
+        <input {...getInputProps()} />
       </div>
 
       {/* Per-file progress */}

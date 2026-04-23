@@ -11,6 +11,7 @@ export interface SharedGalleryInfo {
   image_count: number;
   branding_name: string | null;
   branding_logo_url: string | null;
+  bio: string | null;
 }
 
 export async function getSharedGallery(token: string): Promise<SharedGalleryInfo> {

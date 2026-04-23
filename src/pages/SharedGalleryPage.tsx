@@ -2,11 +2,12 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import {
-  Camera, FileSpreadsheet, Archive, FileDown, X, Square, CheckSquare, ChevronLeft, Globe, Sun, Moon,
-  ArrowLeft, ArrowRight, ZoomIn, ZoomOut, RotateCcw, RotateCw, RefreshCw, Maximize, MessageCircle, Send,
+  Camera, FileSpreadsheet, Archive, FileDown, Download, ChevronDown, X, Square, CheckSquare, Globe, Sun, Moon, Printer,
 } from 'lucide-react';
+import { DropdownMenu } from '@/components/ui/DropdownMenu';
+import { ImageViewer } from '@/components/image/ImageViewer';
+import { OrderPrintsDialog } from '@/components/order/OrderPrintsDialog';
 import {
   getSharedGallery,
   getSharedImages,
@@ -17,14 +18,13 @@ import {
   downloadSharedSingleImage,
   getComments,
   addComment,
-  type CommentData,
   downloadSharedImagesZip,
 } from '@/api/shared-access';
 import type { ImageData } from '@/api/images';
 import { useViewerStore } from '@/stores/viewer-store';
 import { VirtualImageGrid } from '@/components/image/VirtualImageGrid';
-import { formatDateTime } from '@/lib/format-date';
 import { useTheme } from '@/hooks/use-theme';
+import { ExpandableText } from '@/components/ui/ExpandableText';
 
 function SharedThumbnail({
   image, token, editable, selected, onClick, onSelect, onCopiesChange,
@@ -95,259 +95,6 @@ function SharedThumbnail({
   );
 }
 
-function SharedViewer({ images, token, editable, onCopiesChanged }: {
-  images: ImageData[];
-  token: string;
-  editable: boolean;
-  onCopiesChanged: () => void;
-}) {
-  const { t } = useTranslation();
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<CommentData[]>([]);
-  const [commentName, setCommentName] = useState(() => localStorage.getItem('comment_name') || '');
-  const [commentText, setCommentText] = useState('');
-  const {
-    currentIndex, rotation, isFullscreen,
-    closeViewer, toggleFullscreen, next, previous,
-    rotateLeft, rotateRight, resetRotation,
-  } = useViewerStore();
-  const image = images[currentIndex];
-  const [displayValue, setDisplayValue] = useState(String(image?.num_copies ?? 0));
-  const copiesRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (image) setDisplayValue(String(image.num_copies));
-  }, [image]);
-
-  const getParsedCopies = () => {
-    const parsed = parseInt(displayValue);
-    return isNaN(parsed) ? 0 : Math.max(0, Math.min(999, parsed));
-  };
-
-  const saveCopies = useCallback(() => {
-    const copies = getParsedCopies();
-    setDisplayValue(String(copies));
-    if (!image || copies === image.num_copies || !editable) return;
-    updateSharedCopies(token, image.id, copies).then(onCopiesChanged);
-  }, [displayValue, image, editable, token, onCopiesChanged]);
-
-  const handleNext = useCallback(() => {
-    saveCopies();
-    next(images.length);
-  }, [saveCopies, next, images.length]);
-
-  const handlePrevious = useCallback(() => {
-    saveCopies();
-    previous();
-  }, [saveCopies, previous]);
-
-  // Keyboard shortcuts
-  useState(() => {
-    const handler = (e: KeyboardEvent) => {
-      const inInput = (e.target as HTMLElement).tagName === 'INPUT';
-      if (e.key === 'Escape') { if (isFullscreen) toggleFullscreen(); else { saveCopies(); closeViewer(); } return; }
-      if (e.key === 'f' || e.key === 'F') { if (!inInput) toggleFullscreen(); return; }
-      if (e.key === 'Enter' && !inInput) { saveCopies(); if (currentIndex < images.length - 1) next(images.length); return; }
-      if (e.key === 'ArrowLeft' && (e.ctrlKey || !inInput)) { e.preventDefault(); handlePrevious(); return; }
-      if (e.key === 'ArrowRight' && (e.ctrlKey || !inInput)) { e.preventDefault(); handleNext(); return; }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  });
-
-  if (!image) return null;
-
-  const containerClass = isFullscreen
-    ? 'fixed inset-0 z-50 flex flex-col bg-black'
-    : 'fixed inset-0 z-40 flex flex-col bg-background';
-  const barClass = isFullscreen ? 'bg-black/80 text-white' : 'border-border bg-card';
-
-  return (
-    <div className={containerClass}>
-      {/* Top bar */}
-      <div className={`flex items-center justify-between px-4 py-2 ${isFullscreen ? '' : 'border-b'} ${barClass}`}>
-        <button onClick={() => { saveCopies(); closeViewer(); }} className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50">
-          <ChevronLeft className="h-4 w-4" />
-          {t('image.backToGrid')}
-        </button>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{currentIndex + 1} / {images.length}</span>
-          <button onClick={toggleFullscreen} className="rounded-md p-1.5 hover:bg-accent/50" title={t('image.fullscreen')}>
-            <Maximize className="h-4 w-4" />
-          </button>
-          <button
-            onClick={async () => {
-              setShowComments(!showComments);
-              if (!showComments) {
-                const c = await getComments(token, image.id);
-                setComments(c);
-              }
-            }}
-            className={`rounded-md p-1.5 hover:bg-accent/50 ${showComments ? 'text-primary' : ''}`}
-            title="Comments"
-          >
-            <MessageCircle className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => downloadSharedSingleImage(token, image.id)}
-            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
-          >
-            <FileDown className="inline h-3.5 w-3.5 mr-1" />
-            {t('export.downloadImage')}
-          </button>
-        </div>
-      </div>
-
-      {/* Image with zoom/pan */}
-      <div className="relative flex-1 overflow-hidden">
-        <TransformWrapper
-          key={`${image.id}-${rotation}`}
-          initialScale={1}
-          minScale={0.5}
-          maxScale={5}
-          wheel={{ step: 0.1 }}
-        >
-          {({ zoomIn, zoomOut, resetTransform }) => (
-            <>
-              <TransformComponent
-                wrapperStyle={{ width: '100%', height: '100%' }}
-                contentStyle={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <img
-                  src={getSharedImageUrl(token, image.id, 'medium')}
-                  alt={image.filename}
-                  style={{ transform: `rotate(${rotation}deg)`, maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
-                  draggable={false}
-                />
-              </TransformComponent>
-
-              {/* Zoom/rotate controls */}
-              <div className={`absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg px-2 py-1.5 shadow-lg ${isFullscreen ? 'bg-black/70 text-white' : 'bg-card border border-border'}`}>
-                <button onClick={() => zoomIn()} className="rounded p-1.5 hover:bg-accent/50" title={t('image.zoomIn')}>
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-                <button onClick={() => zoomOut()} className="rounded p-1.5 hover:bg-accent/50" title={t('image.zoomOut')}>
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <button onClick={() => resetTransform()} className="rounded p-1.5 hover:bg-accent/50" title={t('image.resetZoom')}>
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-                <div className="mx-1 h-5 w-px bg-border" />
-                <button onClick={rotateLeft} className="rounded p-1.5 hover:bg-accent/50" title={t('image.rotateLeft')}>
-                  <RotateCcw className="h-4 w-4" />
-                </button>
-                <button onClick={rotateRight} className="rounded p-1.5 hover:bg-accent/50" title={t('image.rotateRight')}>
-                  <RotateCw className="h-4 w-4" />
-                </button>
-                <button onClick={resetRotation} className="rounded p-1.5 hover:bg-accent/50" title={t('image.resetRotation')}>
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-              </div>
-            </>
-          )}
-        </TransformWrapper>
-
-        {/* Nav arrows */}
-        {currentIndex > 0 && (
-          <button
-            onClick={handlePrevious}
-            className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-2 shadow-lg ${isFullscreen ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-card border border-border hover:bg-accent'}`}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-        )}
-        {currentIndex < images.length - 1 && (
-          <button
-            onClick={handleNext}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 shadow-lg ${isFullscreen ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-card border border-border hover:bg-accent'}`}
-          >
-            <ArrowRight className="h-5 w-5" />
-          </button>
-        )}
-      </div>
-
-      {/* Comments panel */}
-      {showComments && !isFullscreen && (
-        <div className="border-t border-border bg-card">
-          <div className="mx-auto max-w-2xl px-4 py-3">
-            <div className="mb-3 max-h-40 space-y-2 overflow-y-auto">
-              {comments.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No comments yet</p>
-              ) : (
-                comments.map((c) => (
-                  <div key={c.id} className="rounded-md bg-muted px-3 py-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-foreground">{c.author_name}</span>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(c.created_at)}</span>
-                    </div>
-                    <p className="mt-0.5 text-sm text-foreground">{c.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!commentName.trim() || !commentText.trim()) return;
-                localStorage.setItem('comment_name', commentName.trim());
-                const c = await addComment(token, image.id, commentName.trim(), commentText.trim());
-                setComments((prev) => [...prev, c]);
-                setCommentText('');
-              }}
-              className="flex gap-2"
-            >
-              <input
-                type="text"
-                value={commentName}
-                onChange={(e) => setCommentName(e.target.value)}
-                placeholder={t('auth.fullName')}
-                className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none ring-ring focus:ring-1"
-              />
-              <input
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Comment..."
-                className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none ring-ring focus:ring-1"
-              />
-              <button
-                type="submit"
-                disabled={!commentName.trim() || !commentText.trim()}
-                className="rounded-md bg-primary p-1.5 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom bar — copies */}
-      <div className={`flex items-center justify-center gap-4 px-4 py-3 ${isFullscreen ? '' : 'border-t'} ${barClass}`}>
-        <span className="text-sm">{image.filename}</span>
-        {editable && (
-          <>
-            <label className="text-sm font-medium">{t('image.numberOfCopies')}:</label>
-            <input
-              ref={copiesRef}
-              type="text"
-              inputMode="numeric"
-              value={displayValue}
-              onChange={(e) => setDisplayValue(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={() => saveCopies()}
-              onFocus={(e) => e.target.select()}
-              className="w-20 rounded-md border border-input bg-background px-3 py-1.5 text-center text-sm text-foreground outline-none ring-ring focus:ring-2"
-            />
-          </>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {editable && <>Enter: {t('common.save')} & {t('common.next')} | </>}Esc: {t('image.backToGrid')} | F: {t('image.fullscreen')}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export function SharedGalleryPage() {
   const { token } = useParams<{ token: string }>();
   const { t, i18n } = useTranslation();
@@ -357,6 +104,7 @@ export function SharedGalleryPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [showOrderDialog, setShowOrderDialog] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState('');
   const [batchCopies, setBatchCopies] = useState('0');
   const lastSelectedRef = useRef<number | null>(null);
@@ -483,15 +231,9 @@ export function SharedGalleryPage() {
             ) : (
               <Camera className="h-5 w-5 shrink-0 text-foreground" />
             )}
-            <div className="min-w-0">
-              {info?.branding_name && (
-                <span className="mr-2 text-xs text-muted-foreground">{info.branding_name}</span>
-              )}
-              <span className="truncate font-semibold text-foreground">{info?.gallery_name}</span>
-            </div>
-            <span className="hidden shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground sm:inline">
-              {editable ? t('share.viewAndEdit') : t('share.viewOnly')}
-            </span>
+            {info?.branding_name && (
+              <span className="text-sm font-medium text-foreground">{info.branding_name}</span>
+            )}
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <button
@@ -515,32 +257,75 @@ export function SharedGalleryPage() {
             >
               {document.documentElement.classList.contains('dark') ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
-            {editable && (
-              <a
-                href={`/api/shared/${token}/export/csv`}
-                className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent"
-                title={t('export.exportPrintOrder')}
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('export.exportPrintOrder')}</span>
-              </a>
-            )}
-            <button
-              onClick={() => handleDownloadZip()}
-              disabled={downloading || images.length === 0}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
-              title={t('export.downloadImages')}
-            >
-              <Archive className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('export.downloadImages')}</span>
-            </button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-2 py-4 sm:px-4 sm:py-6">
+        <div className="mb-2 flex items-center gap-2 sm:mb-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{info?.gallery_name ?? '...'}</h1>
+          </div>
+          <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {editable ? t('share.viewAndEdit') : t('share.viewOnly')}
+          </span>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 sm:mb-6 sm:gap-2">
+          <DropdownMenu
+            align="left"
+            trigger={
+              <button
+                disabled={downloading || images.length === 0}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm"
+              >
+                <Download className="h-4 w-4 shrink-0" />
+                {downloading ? downloadProgress : t('export.downloadImages')}
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </button>
+            }
+            items={[
+              { icon: Archive, label: `${t('export.downloadZip')} (${images.length})`, onClick: () => handleDownloadZip() },
+              { icon: FileDown, label: `${t('export.downloadIndividual')} (${images.length})`, onClick: () => handleDownloadIndividual(images.map(i => i.id)) },
+            ]}
+          />
+          {editable && (
+            <>
+              <a
+                href={`/api/shared/${token}/export/csv`}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent sm:px-3 sm:py-2 sm:text-sm"
+              >
+                <FileSpreadsheet className="h-4 w-4 shrink-0" />
+                {t('export.exportPrintOrder')}
+              </a>
+              <button
+                onClick={() => setShowOrderDialog(true)}
+                disabled={images.filter(i => i.num_copies > 0).length === 0}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:px-3 sm:py-2 sm:text-sm"
+              >
+                <Printer className="h-4 w-4 shrink-0" />
+                {t('order.orderPrints')}
+              </button>
+            </>
+          )}
+        </div>
         {info?.gallery_description && (
-          <p className="mb-4 text-sm text-muted-foreground">{info.gallery_description}</p>
+          <ExpandableText text={info.gallery_description} maxLength={150} className="mb-2" />
+        )}
+        {info?.bio && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2">
+            {info.branding_logo_url ? (
+              <img src={info.branding_logo_url} alt="" className="mt-0.5 h-5 w-5 shrink-0 rounded object-contain" />
+            ) : (
+              <Camera className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <div className="min-w-0">
+              {info.branding_name && (
+                <p className="text-xs font-medium text-foreground">{info.branding_name}</p>
+              )}
+              <p className="text-xs italic text-muted-foreground">{info.bio}</p>
+            </div>
+          </div>
         )}
 
         {imagesLoading ? (
@@ -648,11 +433,26 @@ export function SharedGalleryPage() {
       )}
 
       {isViewerOpen && images.length > 0 && (
-        <SharedViewer
+        <ImageViewer
           images={images}
-          token={token!}
-          editable={editable}
           onCopiesChanged={invalidateImages}
+          showCopies={editable}
+          imageUrlFn={(imageId, size) => getSharedImageUrl(token!, imageId, size as 'original' | 'medium' | 'thumbnail')}
+          saveCopiesFn={editable ? async (imageId, copies) => { await updateSharedCopies(token!, imageId, copies); } : undefined}
+          commentsLoadFn={async (imageId) => getComments(token!, imageId)}
+          onDownloadImage={(imageId) => downloadSharedSingleImage(token!, imageId)}
+          onAddComment={async (imageId, name, text) => addComment(token!, imageId, name, text)}
+        />
+      )}
+
+      {info && (
+        <OrderPrintsDialog
+          open={showOrderDialog}
+          onClose={() => setShowOrderDialog(false)}
+          galleryId=""
+          images={images}
+          mode="client"
+          shareToken={token!}
         />
       )}
     </div>

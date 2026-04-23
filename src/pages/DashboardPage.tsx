@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +7,8 @@ import { Header } from '@/components/layout/Header';
 import { GalleryCard } from '@/components/gallery/GalleryCard';
 import { CreateGalleryDialog } from '@/components/gallery/CreateGalleryDialog';
 import { getGalleries, createGallery, deleteGallery } from '@/api/galleries';
-import { Plus } from 'lucide-react';
+import { getMe } from '@/api/auth';
+import { Plus, Camera, Images, Share2, X } from 'lucide-react';
 import { GalleryCardSkeleton } from '@/components/ui/Skeleton';
 
 export function DashboardPage() {
@@ -15,6 +16,7 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const { data: galleries = [], isLoading } = useQuery({
     queryKey: ['galleries'],
@@ -36,6 +38,21 @@ export function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ['galleries'] });
     },
   });
+
+  useEffect(() => {
+    if (isLoading || galleries.length > 0) return;
+    if (localStorage.getItem('welcome_dismissed')) return;
+    getMe().then((me) => {
+      if (!me.branding_name && !me.branding_logo_url) {
+        setShowWelcome(true);
+      }
+    }).catch(() => {});
+  }, [isLoading, galleries.length]);
+
+  const dismissWelcome = () => {
+    localStorage.setItem('welcome_dismissed', '1');
+    setShowWelcome(false);
+  };
 
   const handleDelete = (id: string) => {
     toast(t('gallery.deleteConfirm'), {
@@ -87,6 +104,70 @@ export function DashboardPage() {
         onSubmit={(name, description) => createMutation.mutate({ name, description })}
         loading={createMutation.isPending}
       />
+
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+            <button
+              onClick={dismissWelcome}
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <h2 className="mb-5 text-center text-lg font-semibold text-foreground">
+              {t('welcome.title')}
+            </h2>
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Camera className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t('welcome.step1Title')}</p>
+                  <p className="text-xs text-muted-foreground">{t('welcome.step1Desc')}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Images className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t('welcome.step2Title')}</p>
+                  <p className="text-xs text-muted-foreground">{t('welcome.step2Desc')}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Share2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t('welcome.step3Title')}</p>
+                  <p className="text-xs text-muted-foreground">{t('welcome.step3Desc')}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={dismissWelcome}
+                className="flex-1 rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent"
+              >
+                {t('welcome.skip')}
+              </button>
+              <button
+                onClick={() => { dismissWelcome(); navigate('/profile'); }}
+                className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                {t('welcome.goToProfile')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
