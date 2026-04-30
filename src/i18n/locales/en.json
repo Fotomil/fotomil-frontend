@@ -292,7 +292,9 @@
       "benefit2Title": "Easy management",
       "benefit2Desc": "Manage your products, prices and orders in one portal.",
       "benefit3Title": "Quick onboarding",
-      "benefit3Desc": "Apply in 2 minutes — get a magic-link login once approved."
+      "benefit3Desc": "Apply in 2 minutes — get a magic-link login once approved.",
+      "alreadyPartner": "Already a partner?",
+      "loginAsLab": "Log in as a lab"
     }
   },
   "labApplication": {

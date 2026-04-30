@@ -153,6 +153,15 @@ export function LandingPage() {
             >
               {t('landing.forLabs.applyButton')}
             </button>
+            <p className="mt-4 text-sm text-muted-foreground">
+              {t('landing.forLabs.alreadyPartner')}{' '}
+              <button
+                onClick={() => navigate('/lab/login')}
+                className="font-medium text-foreground underline hover:no-underline"
+              >
+                {t('landing.forLabs.loginAsLab')}
+              </button>
+            </p>
           </div>
         </div>
       </section>

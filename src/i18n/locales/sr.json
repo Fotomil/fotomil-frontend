@@ -292,7 +292,9 @@
       "benefit2Title": "Lako upravljanje",
       "benefit2Desc": "Upravljajte proizvodima, cenama i narudžbinama na jednom mestu.",
       "benefit3Title": "Brza prijava",
-      "benefit3Desc": "Prijavite se za 2 minuta — dobijate link za prijavu po odobrenju."
+      "benefit3Desc": "Prijavite se za 2 minuta — dobijate link za prijavu po odobrenju.",
+      "alreadyPartner": "Već ste partner?",
+      "loginAsLab": "Prijavite se kao laboratorija"
     }
   },
   "labApplication": {
