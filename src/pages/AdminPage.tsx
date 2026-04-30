@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Power } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Power, Check, X as XIcon } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   checkAdmin, getAdminLabs, createLab, updateLab, deleteLab,
   addLabProduct, updateLabProduct, deleteLabProduct,
 } from '@/api/admin';
 import type { Lab } from '@/api/labs';
+import {
+  listLabApplications, approveLabApplication, rejectLabApplication,
+  type LabApplication,
+} from '@/api/lab-applications';
 
 function LabCard({ lab, onUpdated }: { lab: Lab; onUpdated: () => void }) {
   const { t } = useTranslation();
@@ -168,10 +172,152 @@ function LabCard({ lab, onUpdated }: { lab: Lab; onUpdated: () => void }) {
   );
 }
 
+const APP_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  approved: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+};
+
+function ApplicationsTab() {
+  const { t } = useTranslation();
+  const [applications, setApplications] = useState<LabApplication[]>([]);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const load = () => {
+    const status = filter === 'all' ? undefined : filter;
+    listLabApplications(status).then(setApplications).catch(() => {});
+  };
+
+  useEffect(load, [filter]);
+
+  const handleApprove = async (app: LabApplication) => {
+    if (!confirm(t('admin.applications.confirmApprove'))) return;
+    try {
+      await approveLabApplication(app.id);
+      toast.success(t('admin.applications.approvedToast'));
+      load();
+    } catch { toast.error('Failed'); }
+  };
+
+  const handleReject = async (app: LabApplication) => {
+    try {
+      await rejectLabApplication(app.id, rejectReason || null);
+      setRejectingId(null);
+      setRejectReason('');
+      load();
+    } catch { toast.error('Failed'); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              filter === f
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            {t(`admin.applications.${f}`)}
+          </button>
+        ))}
+      </div>
+
+      {applications.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">{t('admin.applications.noApplications')}</p>
+      ) : (
+        <div className="space-y-3">
+          {applications.map((app) => (
+            <div key={app.id} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-medium text-foreground">{app.lab_name}</h3>
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${APP_STATUS_COLORS[app.status]}`}>
+                      {t(`admin.applications.${app.status}`)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{app.lab_email}</p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(app.created_at).toLocaleDateString()}
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                {app.lab_phone && <p><strong>{t('admin.applications.phone')}:</strong> {app.lab_phone}</p>}
+                {app.lab_address && <p><strong>{t('admin.applications.address')}:</strong> {app.lab_address}</p>}
+                {app.lab_website && <p><strong>{t('admin.applications.website')}:</strong> {app.lab_website}</p>}
+                {app.message && (
+                  <div className="mt-2 rounded-lg bg-muted p-3 text-xs">
+                    <strong>{t('admin.applications.message')}:</strong> {app.message}
+                  </div>
+                )}
+                {app.status === 'rejected' && app.rejection_reason && (
+                  <p className="text-xs italic"><strong>{t('admin.applications.rejectionReason')}:</strong> {app.rejection_reason}</p>
+                )}
+              </div>
+
+              {app.status === 'pending' && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleApprove(app)}
+                    className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                  >
+                    <Check className="h-3 w-3" />
+                    {t('admin.applications.approve')}
+                  </button>
+                  {rejectingId === app.id ? (
+                    <>
+                      <input
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        placeholder={t('admin.applications.rejectReasonPlaceholder')}
+                        className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+                      />
+                      <button
+                        onClick={() => handleReject(app)}
+                        className="rounded-lg bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {t('admin.applications.reject')}
+                      </button>
+                      <button
+                        onClick={() => { setRejectingId(null); setRejectReason(''); }}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setRejectingId(app.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent"
+                    >
+                      <XIcon className="h-3 w-3" />
+                      {t('admin.applications.reject')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export function AdminPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<'labs' | 'applications'>('labs');
   const [labs, setLabs] = useState<Lab[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -218,34 +364,58 @@ export function AdminPage() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="flex-1 text-xl font-semibold text-foreground">{t('admin.title')}</h1>
+          {tab === 'labs' && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              {t('admin.addLab')}
+            </button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="mb-4 flex gap-1 border-b border-border">
           <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            onClick={() => setTab('labs')}
+            className={`border-b-2 px-4 py-2 text-sm font-medium ${tab === 'labs' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           >
-            <Plus className="h-4 w-4" />
-            {t('admin.addLab')}
+            {t('admin.tabLabs')}
+          </button>
+          <button
+            onClick={() => setTab('applications')}
+            className={`border-b-2 px-4 py-2 text-sm font-medium ${tab === 'applications' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          >
+            {t('admin.tabApplications')}
           </button>
         </div>
 
-        {showCreate && (
-          <div className="mb-6 rounded-xl border border-border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-medium text-foreground">{t('admin.addLab')}</h3>
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t('admin.labName')} className={inputClass} />
-            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder={t('admin.labEmail')} className={inputClass} />
-            <div className="flex gap-2">
-              <button onClick={handleCreateLab} disabled={!newName.trim() || !newEmail.trim()} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{t('common.create')}</button>
-              <button onClick={() => setShowCreate(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-accent">{t('common.cancel')}</button>
-            </div>
-          </div>
+        {tab === 'labs' && (
+          <>
+            {showCreate && (
+              <div className="mb-6 rounded-xl border border-border bg-card p-4 space-y-3">
+                <h3 className="text-sm font-medium text-foreground">{t('admin.addLab')}</h3>
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t('admin.labName')} className={inputClass} />
+                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder={t('admin.labEmail')} className={inputClass} />
+                <div className="flex gap-2">
+                  <button onClick={handleCreateLab} disabled={!newName.trim() || !newEmail.trim()} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{t('common.create')}</button>
+                  <button onClick={() => setShowCreate(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-accent">{t('common.cancel')}</button>
+                </div>
+              </div>
+            )}
+
+            {labs.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t('admin.noLabs')}</p>
+            ) : (
+              <div className="space-y-3">
+                {labs.map(lab => <LabCard key={lab.id} lab={lab} onUpdated={loadLabs} />)}
+              </div>
+            )}
+          </>
         )}
 
-        {labs.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">{t('admin.noLabs')}</p>
-        ) : (
-          <div className="space-y-3">
-            {labs.map(lab => <LabCard key={lab.id} lab={lab} onUpdated={loadLabs} />)}
-          </div>
-        )}
+        {tab === 'applications' && <ApplicationsTab />}
       </main>
     </div>
   );

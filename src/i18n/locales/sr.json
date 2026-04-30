@@ -235,7 +235,28 @@
     "inactive": "Neaktivna",
     "confirmDelete": "Da li ste sigurni?",
     "noLabs": "Nema dodanih laboratorija.",
-    "accessDenied": "Pristup odbijen"
+    "accessDenied": "Pristup odbijen",
+    "tabLabs": "Laboratorije",
+    "tabApplications": "Prijave",
+    "applications": {
+      "title": "Prijave laboratorija",
+      "all": "Sve",
+      "pending": "Na čekanju",
+      "approved": "Odobrene",
+      "rejected": "Odbijene",
+      "approve": "Odobri",
+      "reject": "Odbij",
+      "rejectReasonPlaceholder": "Razlog (opciono)",
+      "confirmApprove": "Odobriti i kreirati laboratoriju? Link za prijavu će biti poslat na email.",
+      "noApplications": "Nema prijava.",
+      "submittedAt": "Poslata",
+      "phone": "Telefon",
+      "address": "Adresa",
+      "website": "Veb sajt",
+      "message": "Poruka",
+      "rejectionReason": "Razlog odbijanja",
+      "approvedToast": "Prijava odobrena — laboratorija je kreirana i obaveštena."
+    }
   },
   "welcome": {
     "title": "Dobrodošli na FotoMil!",
@@ -261,7 +282,36 @@
     "feature4Title": "Izvoz i štampa",
     "feature4Desc": "Preuzmite CSV, PDF ili ZIP sa izabranim slikama i narudžbinama.",
     "trustedBy": "Za profesionalne fotografe",
-    "alreadyHaveAccount": "Već imate nalog?"
+    "alreadyHaveAccount": "Već imate nalog?",
+    "forLabs": {
+      "title": "Vi ste foto laboratorija?",
+      "desc": "Postanite partner FotoMil-a i primajte narudžbine za štampu direktno od fotografa i njihovih klijenata.",
+      "applyButton": "Postani partner",
+      "benefit1Title": "Novi klijenti",
+      "benefit1Desc": "Primajte narudžbine od fotografa iz naše mreže.",
+      "benefit2Title": "Lako upravljanje",
+      "benefit2Desc": "Upravljajte proizvodima, cenama i narudžbinama na jednom mestu.",
+      "benefit3Title": "Brza prijava",
+      "benefit3Desc": "Prijavite se za 2 minuta — dobijate link za prijavu po odobrenju."
+    }
+  },
+  "labApplication": {
+    "formTitle": "Postanite partner laboratorija",
+    "formDesc": "Recite nam o vašoj laboratoriji. Pregledaćemo prijavu i kontaktirati vas.",
+    "labName": "Naziv laboratorije",
+    "labEmail": "Kontakt email",
+    "labPhone": "Telefon (opciono)",
+    "labAddress": "Adresa (opciono)",
+    "labWebsite": "Veb sajt (opciono)",
+    "message": "Recite nam o vašoj laboratoriji (opciono)",
+    "messagePlaceholder": "Usluge koje pružate, lokacija, bilo šta drugo...",
+    "submit": "Pošalji prijavu",
+    "success": "Prijava poslata!",
+    "successDesc": "Hvala vam. Pregledaćemo prijavu i kontaktirati vas uskoro.",
+    "alreadyApplied": "Prijava sa ovog emaila je već u pregledu.",
+    "alreadyPartner": "Ovaj email je već FotoMil partner.",
+    "rateLimited": "Previše zahteva. Pokušajte kasnije.",
+    "errorGeneric": "Slanje nije uspelo. Pokušajte ponovo."
   },
   "theme": {
     "light": "Svetla",
