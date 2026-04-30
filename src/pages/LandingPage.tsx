@@ -73,6 +73,12 @@ export function LandingPage() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <button
+              onClick={() => navigate('/lab/login')}
+              className="hidden rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground sm:inline-block"
+            >
+              {t('landing.forLabs.loginAsLab')}
+            </button>
+            <button
               onClick={handleLogin}
               className="ml-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
