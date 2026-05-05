@@ -1,44 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
-import { Camera, Mail } from 'lucide-react';
-import { sendLabLoginLink, setLabToken, getLabMe } from '@/api/lab-portal';
+import { useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
+import { Camera } from 'lucide-react';
 
+/**
+ * Lab login uses the same Auth0 Universal Login as photographers.
+ * After Auth0 returns, we read the access-token claims:
+ *  - if `role === "lab"` → /lab/dashboard
+ *  - otherwise          → /dashboard (regular photographer flow)
+ */
 export function LabLoginPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const { isAuthenticated, isLoading, getAccessTokenSilently, loginWithRedirect } = useAuth0();
 
-  // If token in URL, auto-login
+  // After login, route based on role claim
   useEffect(() => {
-    const token = searchParams.get('token');
-    if (token) {
-      setLabToken(token);
-      getLabMe()
-        .then(() => navigate('/lab/dashboard', { replace: true }))
-        .catch(() => toast.error(t('labPortal.loginFailed')));
-    }
-  }, [searchParams, navigate, t]);
+    if (isLoading || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const role = payload.role || payload['https://fotomil.xyz/role'];
+        if (cancelled) return;
+        if (role === 'lab') navigate('/lab/dashboard', { replace: true });
+        else navigate('/dashboard', { replace: true });
+      } catch {
+        navigate('/dashboard', { replace: true });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, isLoading, getAccessTokenSilently, navigate]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setSending(true);
-    try {
-      await sendLabLoginLink(email.trim());
-      setSent(true);
-    } catch {
-      toast.error('Failed to send link');
-    } finally {
-      setSending(false);
-    }
+  const handleLogin = () => {
+    loginWithRedirect({
+      authorizationParams: {
+        ui_locales: i18n.language,
+        redirect_uri: `${window.location.origin}/lab/login`,
+      },
+    });
   };
-
-  const inputClass = 'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2';
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -48,32 +51,14 @@ export function LabLoginPage() {
           <h1 className="text-lg font-semibold text-foreground">FotoMil</h1>
         </div>
         <h2 className="mb-2 text-center text-xl font-semibold text-foreground">{t('labPortal.loginTitle')}</h2>
-        <p className="mb-6 text-center text-sm text-muted-foreground">{t('labPortal.loginDesc')}</p>
+        <p className="mb-6 text-center text-sm text-muted-foreground">{t('labPortal.loginAuth0Desc')}</p>
 
-        {sent ? (
-          <div className="rounded-lg bg-green-50 p-4 text-center text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400">
-            <Mail className="mx-auto mb-2 h-6 w-6" />
-            {t('labPortal.linkSent')}
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t('labPortal.email')}
-              className={inputClass}
-              required
-            />
-            <button
-              type="submit"
-              disabled={sending || !email.trim()}
-              className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {sending ? t('common.loading') : t('labPortal.sendLink')}
-            </button>
-          </form>
-        )}
+        <button
+          onClick={handleLogin}
+          className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          {t('labPortal.signInButton')}
+        </button>
       </div>
     </div>
   );

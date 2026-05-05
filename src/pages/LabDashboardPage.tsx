@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import { toast } from 'sonner';
 import { Camera, LogOut, Download, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import {
-  getLabMe, getLabOrders, updateLabOrderStatus, clearLabToken, getLabDownloadUrl,
+  getLabMe, getLabOrders, updateLabOrderStatus, getLabDownloadUrl,
   getLabProducts, addLabProduct, updateLabProduct, deleteLabProduct,
   type LabMe, type LabProduct,
 } from '@/api/lab-portal';
@@ -20,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function LabDashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading, getAccessTokenSilently, logout, loginWithRedirect } = useAuth0();
   const [me, setMe] = useState<LabMe | null>(null);
   const [tab, setTab] = useState<'orders' | 'products'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -31,17 +33,24 @@ export function LabDashboardPage() {
   const loadProducts = () => getLabProducts().then(setProducts).catch(() => {});
 
   useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      loginWithRedirect({ authorizationParams: { redirect_uri: `${window.location.origin}/lab/login` } });
+      return;
+    }
     getLabMe()
       .then((data) => {
         setMe(data);
         getLabOrders().then(setOrders);
         loadProducts();
       })
-      .catch(() => {
-        clearLabToken();
-        navigate('/lab/login');
+      .catch((err) => {
+        if (err?.response?.status === 403) {
+          toast.error(t('labPortal.notALab'));
+        }
+        navigate('/lab/login', { replace: true });
       });
-  }, [navigate]);
+  }, [isAuthenticated, isLoading, loginWithRedirect, navigate, t]);
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
     try {
@@ -51,12 +60,12 @@ export function LabDashboardPage() {
   };
 
   const handleLogout = () => {
-    clearLabToken();
-    navigate('/lab/login');
+    logout({ logoutParams: { returnTo: window.location.origin } });
   };
 
-  const handleDownload = (orderId: string) => {
-    window.location.href = getLabDownloadUrl(orderId);
+  const handleDownload = async (orderId: string) => {
+    const token = await getAccessTokenSilently();
+    window.location.href = getLabDownloadUrl(orderId, token);
   };
 
   const handleAddProduct = async () => {

@@ -1,15 +1,17 @@
 import { useTranslation } from 'react-i18next';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Camera, Images, Palette, Download, Globe, Sun, Moon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Camera, Images, Palette, Download, Globe, Sun, Moon, Users, Settings, Zap } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
+import { LabApplicationDialog } from '@/components/lab/LabApplicationDialog';
 
 export function LandingPage() {
   const { t, i18n } = useTranslation();
   const { isAuthenticated, loginWithRedirect } = useAuth0();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const [showLabDialog, setShowLabDialog] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -71,6 +73,12 @@ export function LandingPage() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <button
+              onClick={() => navigate('/lab/login')}
+              className="hidden rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground sm:inline-block"
+            >
+              {t('landing.forLabs.loginAsLab')}
+            </button>
+            <button
               onClick={handleLogin}
               className="ml-2 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
@@ -99,9 +107,14 @@ export function LandingPage() {
       {/* Features */}
       <section className="border-t border-border bg-card/50">
         <div className="mx-auto max-w-5xl px-4 py-16 sm:py-20">
-          <p className="mb-10 text-center text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            {t('landing.trustedBy')}
-          </p>
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              {t('landing.trustedBy')}
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-base text-muted-foreground">
+              {t('landing.trustedByDesc')}
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {features.map((f) => (
               <div
@@ -117,6 +130,53 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* For Labs */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-5xl px-4 py-16 sm:py-20">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              {t('landing.forLabs.title')}
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground">
+              {t('landing.forLabs.desc')}
+            </p>
+          </div>
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+            {[
+              { icon: Users, title: t('landing.forLabs.benefit1Title'), desc: t('landing.forLabs.benefit1Desc') },
+              { icon: Settings, title: t('landing.forLabs.benefit2Title'), desc: t('landing.forLabs.benefit2Desc') },
+              { icon: Zap, title: t('landing.forLabs.benefit3Title'), desc: t('landing.forLabs.benefit3Desc') },
+            ].map((b) => (
+              <div
+                key={b.title}
+                className="rounded-lg border border-border bg-card p-6 transition-colors hover:border-foreground/20"
+              >
+                <b.icon className="mb-3 h-6 w-6 text-foreground" />
+                <h3 className="text-base font-semibold text-foreground">{b.title}</h3>
+                <p className="mt-1.5 text-sm text-muted-foreground">{b.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-10 text-center">
+            <button
+              onClick={() => setShowLabDialog(true)}
+              className="rounded-md bg-primary px-8 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              {t('landing.forLabs.applyButton')}
+            </button>
+            <p className="mt-4 text-sm text-muted-foreground">
+              {t('landing.forLabs.alreadyPartner')}{' '}
+              <button
+                onClick={() => navigate('/lab/login')}
+                className="font-medium text-foreground underline hover:no-underline"
+              >
+                {t('landing.forLabs.loginAsLab')}
+              </button>
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Footer CTA */}
       <section className="border-t border-border">
         <div className="mx-auto max-w-5xl px-4 py-12 text-center">
@@ -128,6 +188,8 @@ export function LandingPage() {
           </p>
         </div>
       </section>
+
+      <LabApplicationDialog open={showLabDialog} onClose={() => setShowLabDialog(false)} />
     </div>
   );
 }
