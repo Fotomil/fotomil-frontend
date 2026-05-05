@@ -282,6 +282,8 @@
     "feature4Title": "Izvoz i štampa",
     "feature4Desc": "Preuzmite CSV, PDF ili ZIP sa izabranim slikama i narudžbinama.",
     "trustedBy": "Za profesionalne fotografe",
+    "trustedByBadge": "Za fotografe",
+    "trustedByDesc": "Sve što vam treba da klijentima predate galerije, prikupite njihov izbor i pretvorite ga u narudžbinu za štampu.",
     "alreadyHaveAccount": "Već imate nalog?",
     "forLabs": {
       "title": "Vi ste foto laboratorija?",

@@ -107,9 +107,17 @@ export function LandingPage() {
       {/* Features */}
       <section className="border-t border-border bg-card/50">
         <div className="mx-auto max-w-5xl px-4 py-16 sm:py-20">
-          <p className="mb-10 text-center text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            {t('landing.trustedBy')}
-          </p>
+          <div className="mb-12 text-center">
+            <span className="inline-block rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
+              {t('landing.trustedByBadge')}
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              {t('landing.trustedBy')}
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-base text-muted-foreground">
+              {t('landing.trustedByDesc')}
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {features.map((f) => (
               <div
